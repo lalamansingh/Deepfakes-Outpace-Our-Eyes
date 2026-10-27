@@ -116,6 +116,9 @@ export default function Home() {
                 <ButtonLink href="/play" className="px-6 py-4 text-base">
                   Play today&apos;s challenge <ArrowRight className="size-4" aria-hidden />
                 </ButtonLink>
+                <ButtonLink href="/spot" variant="dark" className="px-6 py-4 text-base">
+                  Spot the fake
+                </ButtonLink>
                 <ButtonLink href="/practice" variant="dark" className="px-6 py-4 text-base">
                   Practice
                 </ButtonLink>

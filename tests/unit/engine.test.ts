@@ -3,6 +3,7 @@ import type { ClueKind } from "@/lib/contracts";
 import {
   aiCountFor,
   BASE_RATING,
+  buildSpotPuzzles,
   brierFor,
   type Candidate,
   currentStreak,
@@ -181,6 +182,54 @@ describe("selectRoundItems", () => {
       weak += ids.filter((id) => Number(id.slice(1)) < 20).length;
     }
     expect(weak / (50 * 8)).toBeGreaterThan(0.6);
+  });
+});
+
+describe("buildSpotPuzzles", () => {
+  const now = new Date("2026-12-10T12:00:00Z");
+
+  it("builds puzzles with exactly one odd item, no repeats, mostly within one category", () => {
+    const cands = makeCandidates(48);
+    const byId = new Map(cands.map((c) => [c.id, c]));
+    const finds = new Set<string>();
+    for (let s = 0; s < 100; s++) {
+      const puzzles = buildSpotPuzzles({ candidates: cands, history: new Map(), now, puzzles: 4, grid: 4, rng: seededRandom(`spot-${s}`) });
+      expect(puzzles).toHaveLength(4);
+      const all = puzzles.flatMap((p) => p.itemIds);
+      expect(new Set(all).size).toBe(16);
+      for (const p of puzzles) {
+        finds.add(p.find);
+        expect(p.itemIds).toHaveLength(4);
+        expect(p.itemIds).toContain(p.oddId);
+        const labels = p.itemIds.map((id) => byId.get(id)!.label);
+        expect(labels.filter((l) => l === p.find)).toHaveLength(1);
+        expect(byId.get(p.oddId)!.label).toBe(p.find);
+      }
+    }
+    expect(finds).toEqual(new Set(["ai", "real"]));
+  });
+
+  it("keeps a puzzle inside one category when the library allows", () => {
+    const cands: Candidate[] = ["animal", "food"].flatMap((cat) =>
+      Array.from({ length: 8 }, (_, i) => ({ id: `${cat}-${i}`, label: (i % 2 ? "ai" : "real") as "ai" | "real", category: cat, rating: 1500, tags: [] })),
+    );
+    const puzzles = buildSpotPuzzles({ candidates: cands, history: new Map(), now, puzzles: 2, grid: 4, rng: seededRandom("cat") });
+    for (const p of puzzles) expect(new Set(p.itemIds.map((id) => id.split("-")[0])).size).toBe(1);
+  });
+
+  it("puts the odd item in every position over many rounds", () => {
+    const positions = new Set<number>();
+    for (let s = 0; s < 50; s++) {
+      const [p] = buildSpotPuzzles({ candidates: makeCandidates(20), history: new Map(), now, puzzles: 1, grid: 4, rng: seededRandom(`pos-${s}`) });
+      positions.add(p.itemIds.indexOf(p.oddId));
+    }
+    expect(positions).toEqual(new Set([0, 1, 2, 3]));
+  });
+
+  it("stops when the library cannot fill another puzzle", () => {
+    const puzzles = buildSpotPuzzles({ candidates: makeCandidates(9), history: new Map(), now, puzzles: 4, grid: 4, rng: seededRandom("small") });
+    expect(puzzles.length).toBe(2);
+    expect(buildSpotPuzzles({ candidates: [], history: new Map(), now, puzzles: 4, grid: 4, rng: seededRandom("x") })).toEqual([]);
   });
 });
 

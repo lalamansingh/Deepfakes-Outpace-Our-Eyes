@@ -11,10 +11,14 @@ import type {
   RoundDTO,
   RoundKind,
   RoundSummaryDTO,
+  SourceDTO,
+  SpotPickInput,
+  SpotResultDTO,
 } from "@/lib/contracts";
-import { ROUND_SIZE } from "@/lib/contracts";
+import { ROUND_SIZE, SPOT_GRID, SPOT_PUZZLES } from "@/lib/contracts";
 import { type Db, schema } from "@/db/client";
 import {
+  buildSpotPuzzles,
   type Candidate,
   currentStreak,
   dayKey,
@@ -36,6 +40,7 @@ const { items, clues, rounds, answers, players, playerSkills } = schema;
 type RoundRow = typeof rounds.$inferSelect;
 type ItemRow = typeof items.$inferSelect;
 type ClueRow = typeof clues.$inferSelect;
+type SpotPuzzleRow = NonNullable<RoundRow["puzzles"]>[number];
 
 // ---------------------------------------------------------------- loading helpers
 
@@ -55,6 +60,39 @@ function toPlayItem(it: ItemRow): PlayItemDTO {
   return { id: it.id, mediaType: it.mediaType, mediaUrl: it.mediaUrl, width: it.width, height: it.height, category: it.category };
 }
 
+function sourceOf(it: ItemRow): SourceDTO {
+  return {
+    name: it.sourceName,
+    url: it.sourceUrl,
+    license: it.license,
+    licenseUrl: it.licenseUrl,
+    attribution: it.attribution,
+    generator: it.generator,
+  };
+}
+
+function toSpotResult(
+  a: typeof answers.$inferSelect,
+  index: number,
+  puzzle: SpotPuzzleRow,
+  byId: Map<string, ItemRow>,
+  oddClues: ClueRow[],
+  progress: { answered: number; total: number },
+): SpotResultDTO {
+  return {
+    puzzle: index,
+    pickedItemId: a.pickedItemId ?? a.itemId,
+    oddItemId: puzzle.oddId,
+    find: puzzle.find,
+    correct: a.correct,
+    confidence: a.confidence,
+    points: a.points,
+    items: puzzle.itemIds.map((id) => ({ itemId: id, label: byId.get(id)!.label, source: sourceOf(byId.get(id)!) })),
+    clues: oddClues.map(toClueDTO),
+    progress,
+  };
+}
+
 function toAnswerResult(
   a: typeof answers.$inferSelect,
   it: ItemRow,
@@ -69,14 +107,7 @@ function toAnswerResult(
     label: it.label,
     points: a.points,
     clues: itemClues.map(toClueDTO),
-    source: {
-      name: it.sourceName,
-      url: it.sourceUrl,
-      license: it.license,
-      licenseUrl: it.licenseUrl,
-      attribution: it.attribution,
-      generator: it.generator,
-    },
+    source: sourceOf(it),
     progress,
   };
 }
@@ -100,8 +131,32 @@ export async function toRoundDTO(db: Db, round: RoundRow): Promise<RoundDTO> {
     db,
     answerRows.map((a) => a.itemId),
   );
-  const total = round.itemIds.length;
   const ordered = round.itemIds.map((id) => byId.get(id)).filter((i): i is ItemRow => Boolean(i));
+  const base = {
+    id: round.id,
+    kind: round.kind,
+    dayKey: round.dayKey,
+    items: ordered.map(toPlayItem),
+    completedAt: round.completedAt ? round.completedAt.toISOString() : null,
+  };
+
+  if (round.puzzles) {
+    const total = round.puzzles.length;
+    const spotResults: SpotResultDTO[] = [];
+    round.puzzles.forEach((pz, index) => {
+      const a = answerByItem.get(pz.oddId);
+      if (a) spotResults.push(toSpotResult(a, index, pz, byId, clueMap.get(pz.oddId) ?? [], { answered: spotResults.length + 1, total }));
+    });
+    return {
+      ...base,
+      answers: [],
+      // The odd item is never sent before the puzzle is answered.
+      puzzles: round.puzzles.map((pz, index) => ({ index, itemIds: pz.itemIds, find: pz.find })),
+      spotResults,
+    };
+  }
+
+  const total = round.itemIds.length;
   let answered = 0;
   const results: AnswerResultDTO[] = [];
   for (const it of ordered) {
@@ -110,14 +165,7 @@ export async function toRoundDTO(db: Db, round: RoundRow): Promise<RoundDTO> {
     answered++;
     results.push(toAnswerResult(a, it, clueMap.get(it.id) ?? [], { answered, total }));
   }
-  return {
-    id: round.id,
-    kind: round.kind,
-    dayKey: round.dayKey,
-    items: ordered.map(toPlayItem),
-    answers: results,
-    completedAt: round.completedAt ? round.completedAt.toISOString() : null,
-  };
+  return { ...base, answers: results, puzzles: null, spotResults: [] };
 }
 
 // ---------------------------------------------------------------- creating rounds
@@ -129,7 +177,7 @@ async function existingRound(db: Db, playerId: string, kind: RoundKind, now: Dat
   const conds = [eq(rounds.playerId, playerId), eq(rounds.kind, kind)];
   if (kind === "daily") conds.push(eq(rounds.dayKey, dayKey(now)));
   // Practice resumes the player's recent unfinished round instead of piling up new ones.
-  if (kind === "practice") {
+  if (kind === "practice" || kind === "spot") {
     conds.push(isNull(rounds.completedAt), gte(rounds.createdAt, new Date(now.getTime() - OPEN_ROUND_RESERVATION_MS)));
   }
   const [row] = await db
@@ -147,7 +195,7 @@ async function existingRound(db: Db, playerId: string, kind: RoundKind, now: Dat
  */
 async function itemsReservedByOpenRounds(db: Db, playerId: string, now: Date): Promise<Set<string>> {
   const open = await db
-    .select({ id: rounds.id, itemIds: rounds.itemIds })
+    .select({ id: rounds.id, itemIds: rounds.itemIds, puzzles: rounds.puzzles })
     .from(rounds)
     .where(
       and(
@@ -167,6 +215,8 @@ async function itemsReservedByOpenRounds(db: Db, playerId: string, now: Date): P
       ),
     );
   const done = new Set(answered.map((a) => a.itemId));
+  // In a spot round, answering a puzzle reveals all of its items.
+  for (const r of open) for (const pz of r.puzzles ?? []) if (done.has(pz.oddId)) pz.itemIds.forEach((id) => done.add(id));
   return new Set(open.flatMap((r) => r.itemIds).filter((id) => !done.has(id)));
 }
 
@@ -184,17 +234,22 @@ async function playerSkillMap(db: Db, playerId: string): Promise<Map<ClueKind, {
   return new Map(rows.map((r) => [r.tag, { rating: Number(r.rating), answered: r.answered }]));
 }
 
-async function chooseItems(db: Db, playerId: string, kind: RoundKind, today: string, now: Date): Promise<string[]> {
+type RoundPlan = { itemIds: string[]; puzzles: SpotPuzzleRow[] | null };
+
+async function chooseItems(db: Db, playerId: string, kind: RoundKind, today: string, now: Date): Promise<RoundPlan> {
   if (kind === "assessment_pre" || kind === "assessment_post") {
     const set = kind === "assessment_pre" ? "A" : "B";
     const rows = await db
       .select({ id: items.id })
       .from(items)
       .where(and(eq(items.status, "published"), eq(items.assessmentSet, set)));
-    return shuffle(
-      rows.map((r) => r.id),
-      seededRandom(`${playerId}|${kind}`),
-    );
+    return {
+      itemIds: shuffle(
+        rows.map((r) => r.id),
+        seededRandom(`${playerId}|${kind}`),
+      ),
+      puzzles: null,
+    };
   }
 
   const busy = await itemsReservedByOpenRounds(db, playerId, now);
@@ -215,14 +270,20 @@ async function chooseItems(db: Db, playerId: string, kind: RoundKind, today: str
     rating: Number(i.rating),
     tags: tagsOf(clueMap.get(i.id)),
   }));
-  return selectRoundItems({
+  const history = await playerHistory(db, playerId);
+  if (kind === "spot") {
+    const puzzles = buildSpotPuzzles({ candidates, history, now, puzzles: SPOT_PUZZLES, grid: SPOT_GRID, rng: seededRandom(randomUUID()) });
+    return { itemIds: puzzles.flatMap((p) => p.itemIds), puzzles };
+  }
+  const itemIds = selectRoundItems({
     candidates,
     skills: await playerSkillMap(db, playerId),
-    history: await playerHistory(db, playerId),
+    history,
     now,
     size: ROUND_SIZE,
     rng: seededRandom(kind === "daily" ? `${playerId}|${today}` : randomUUID()),
   });
+  return { itemIds, puzzles: null };
 }
 
 /**
@@ -237,7 +298,7 @@ export async function createRound(db: Db, playerId: string, kind: RoundKind, now
     return toRoundDTO(db, existing);
   }
 
-  const itemIds = await chooseItems(db, playerId, kind, today, now);
+  const { itemIds, puzzles } = await chooseItems(db, playerId, kind, today, now);
   if (itemIds.length === 0) {
     throw new HttpError(
       "conflict",
@@ -246,11 +307,11 @@ export async function createRound(db: Db, playerId: string, kind: RoundKind, now
   }
 
   try {
-    const [round] = await db.insert(rounds).values({ playerId, kind, dayKey: today, itemIds, createdAt: now }).returning();
+    const [round] = await db.insert(rounds).values({ playerId, kind, dayKey: today, itemIds, puzzles, createdAt: now }).returning();
     return await toRoundDTO(db, round);
   } catch (err) {
     // Two tabs raced to create today's round or an assessment: return the winner.
-    if (isUniqueViolation(err) && kind !== "practice") {
+    if (isUniqueViolation(err) && kind !== "practice" && kind !== "spot") {
       const existing = await existingRound(db, playerId, kind, now);
       if (existing) return toRoundDTO(db, existing);
     }
@@ -264,18 +325,29 @@ export async function getRound(db: Db, playerId: string, roundId: string): Promi
 
 // ---------------------------------------------------------------- answering
 
-export async function answerItem(db: Db, playerId: string, roundId: string, input: AnswerInput, now = new Date()): Promise<AnswerResultDTO> {
-  const round = await loadOwnedRound(db, playerId, roundId);
-  if (round.completedAt) throw new HttpError("conflict", "This round is already complete");
-  if (!round.itemIds.includes(input.itemId)) throw new HttpError("validation_error", "That item is not part of this round");
+type Recorded = { answer: typeof answers.$inferSelect; answered: number };
 
-  const [item] = await db.select().from(items).where(eq(items.id, input.itemId)).limit(1);
-  if (!item) throw notFound("Item");
-  const itemClues = (await cluesByItem(db, [item.id])).get(item.id) ?? [];
-  const tags = tagsOf(itemClues);
-  const correct = input.guess === item.label;
-  const points = pointsFor(correct, input.confidence);
-
+/**
+ * Stores one answer on `item` and updates the item's difficulty and the player's
+ * skills, atomically. Shared by single-item rounds and spot puzzles.
+ */
+async function recordAnswer(
+  db: Db,
+  args: {
+    playerId: string;
+    roundId: string;
+    item: ItemRow;
+    tags: ClueKind[];
+    guess: Label;
+    confidence: number;
+    responseMs: number;
+    pickedItemId: string | null;
+    now: Date;
+  },
+): Promise<Recorded> {
+  const { playerId, roundId, item, tags, guess, confidence, responseMs, pickedItemId, now } = args;
+  const correct = guess === item.label;
+  const points = pointsFor(correct, confidence);
   try {
     const answer = await db.transaction(async (tx) => {
       const skillRows = tags.length
@@ -290,17 +362,7 @@ export async function answerItem(db: Db, playerId: string, roundId: string, inpu
 
       const [inserted] = await tx
         .insert(answers)
-        .values({
-          roundId,
-          playerId,
-          itemId: item.id,
-          guess: input.guess,
-          confidence: input.confidence,
-          correct,
-          points,
-          responseMs: input.responseMs,
-          createdAt: now,
-        })
+        .values({ roundId, playerId, itemId: item.id, guess, confidence, correct, points, responseMs, pickedItemId, createdAt: now })
         .returning();
 
       // Relative updates so concurrent answers by other players never overwrite each other.
@@ -328,16 +390,70 @@ export async function answerItem(db: Db, playerId: string, roundId: string, inpu
       await tx.update(players).set({ lastSeenAt: now }).where(eq(players.id, playerId));
       return inserted;
     });
-
     const [{ count }] = await db
       .select({ count: sql<number>`count(*)::int` })
       .from(answers)
       .where(eq(answers.roundId, roundId));
-    return toAnswerResult(answer, item, itemClues, { answered: Number(count), total: round.itemIds.length });
+    return { answer, answered: Number(count) };
   } catch (err) {
-    if (isUniqueViolation(err)) throw new HttpError("conflict", "You already answered this item");
+    if (isUniqueViolation(err)) throw new HttpError("conflict", "You already answered this");
     throw err;
   }
+}
+
+export async function answerItem(db: Db, playerId: string, roundId: string, input: AnswerInput, now = new Date()): Promise<AnswerResultDTO> {
+  const round = await loadOwnedRound(db, playerId, roundId);
+  if (round.completedAt) throw new HttpError("conflict", "This round is already complete");
+  if (round.puzzles) throw new HttpError("validation_error", "Answer this round by picking the odd one out");
+  if (!round.itemIds.includes(input.itemId)) throw new HttpError("validation_error", "That item is not part of this round");
+
+  const [item] = await db.select().from(items).where(eq(items.id, input.itemId)).limit(1);
+  if (!item) throw notFound("Item");
+  const itemClues = (await cluesByItem(db, [item.id])).get(item.id) ?? [];
+  const { answer, answered } = await recordAnswer(db, {
+    playerId,
+    roundId,
+    item,
+    tags: tagsOf(itemClues),
+    guess: input.guess,
+    confidence: input.confidence,
+    responseMs: input.responseMs,
+    pickedItemId: null,
+    now,
+  });
+  return toAnswerResult(answer, item, itemClues, { answered, total: round.itemIds.length });
+}
+
+/**
+ * A spot pick is stored as an answer on the puzzle's odd item: picking it means
+ * the player correctly judged its label; picking anything else means they judged
+ * it to have the majority label. So stats, skills and dashboards stay consistent.
+ */
+export async function answerSpot(db: Db, playerId: string, roundId: string, input: SpotPickInput, now = new Date()): Promise<SpotResultDTO> {
+  const round = await loadOwnedRound(db, playerId, roundId);
+  if (round.completedAt) throw new HttpError("conflict", "This round is already complete");
+  const puzzle = round.puzzles?.[input.puzzle];
+  if (!puzzle) throw new HttpError("validation_error", "That puzzle is not part of this round");
+  if (!puzzle.itemIds.includes(input.itemId)) throw new HttpError("validation_error", "Pick one of the puzzle's items");
+
+  const puzzleItems = await db.select().from(items).where(inArray(items.id, puzzle.itemIds));
+  const byId = new Map(puzzleItems.map((i) => [i.id, i]));
+  const odd = byId.get(puzzle.oddId);
+  if (!odd) throw notFound("Item");
+  const oddClues = (await cluesByItem(db, [odd.id])).get(odd.id) ?? [];
+  const correct = input.itemId === puzzle.oddId;
+  const { answer, answered } = await recordAnswer(db, {
+    playerId,
+    roundId,
+    item: odd,
+    tags: tagsOf(oddClues),
+    guess: correct ? odd.label : odd.label === "ai" ? "real" : "ai",
+    confidence: input.confidence,
+    responseMs: input.responseMs,
+    pickedItemId: input.itemId,
+    now,
+  });
+  return toSpotResult(answer, input.puzzle, puzzle, byId, oddClues, { answered, total: round.puzzles!.length });
 }
 
 // ---------------------------------------------------------------- completing
@@ -349,7 +465,8 @@ export async function completeRound(db: Db, playerId: string, roundId: string, n
     .from(answers)
     .innerJoin(items, eq(items.id, answers.itemId))
     .where(eq(answers.roundId, roundId));
-  if (rows.length < round.itemIds.length) throw new HttpError("validation_error", "Answer every item before finishing the round");
+  const expected = round.puzzles ? round.puzzles.length : round.itemIds.length;
+  if (rows.length < expected) throw new HttpError("validation_error", "Answer every item before finishing the round");
 
   const clueMap = await cluesByItem(
     db,

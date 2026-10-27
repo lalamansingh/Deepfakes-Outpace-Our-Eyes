@@ -13,10 +13,11 @@ Mutating requests (POST/PUT/PATCH/DELETE) must be same-origin (the server reject
 |---|---|---|---|
 | `POST /api/session` | – | `PlayerDTO` | Creates the anonymous player on first visit, otherwise returns the current one. Call once on app load. |
 | `GET /api/me` | – | `PlayerDTO` | 401 if no session yet. |
-| `POST /api/rounds` | `{ kind?: RoundKind }` (default `"daily"`) | `RoundDTO` | `daily` is idempotent per UTC day: returns today's round (with answers so far) if it exists. `practice` always starts a new round. `assessment_pre` / `assessment_post` use the fixed sets A / B and can be taken once each (409 if already completed). |
+| `POST /api/rounds` | `{ kind?: RoundKind }` (default `"daily"`) | `RoundDTO` | `daily` is idempotent per UTC day: returns today's round (with answers so far) if it exists. `practice` and `spot` resume the player's unfinished round from the last 2 days, otherwise start a new one. `spot` rounds carry `puzzles` (4 grids of 4 items, exactly one odd item each — which one is never sent before the pick). `assessment_pre` / `assessment_post` use the fixed sets A / B and can be taken once each (409 if already completed). |
 | `GET /api/rounds/:id` | – | `RoundDTO` | Resume a round. 404 if it belongs to someone else. |
 | `POST /api/rounds/:id/answers` | `AnswerInput` | `AnswerResultDTO` | Reveals label, points, clues and source. 409 if the item was already answered in this round; 400 if the item is not part of the round. |
 | `POST /api/rounds/:id/complete` | – | `RoundSummaryDTO` | Only after every item is answered (400 otherwise). Idempotent. Updates streak for daily rounds. |
+| `POST /api/rounds/:id/picks` | `SpotPickInput` (`{ puzzle, itemId, confidence, responseMs }`) | `SpotResultDTO` | Spot rounds (`kind: "spot"`) only: pick the odd one out of a puzzle. Reveals every item's label and the odd item's clues. 409 if the puzzle was already answered. |
 | `POST /api/classrooms/join` | `{ code, nickname }` | `PlayerDTO` | Joins a teacher's class. 404 for an unknown code. |
 | `GET /api/credits` | – | `{ credits: { author: string; license: string; licenseUrl: string \| null; sourceUrl: string }[] }` | Attribution list for the credits page (no labels). |
 

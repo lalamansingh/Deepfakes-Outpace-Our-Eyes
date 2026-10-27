@@ -12,7 +12,7 @@ and — at the end of the round — how well their confidence matched their accu
 
 | Part | Where | What it does |
 |---|---|---|
-| Player app | `/`, `/play`, `/practice`, `/progress`, `/join` | Anonymous play, daily rounds, practice, clue reveal, calibration feedback, streaks, class join |
+| Player app | `/`, `/play`, `/spot`, `/practice`, `/progress`, `/join`, `/check/*` | Anonymous play, daily rounds, **Spot the fake** (find the odd one out in a grid of four), practice, clue reveal, calibration feedback, streaks, class join, starting/final checks |
 | Teacher dashboard | `/teacher` | Classes with join codes, class accuracy over time, hardest clue types, pre/post assessment, students table |
 | Admin content studio | `/admin` | Upload media, label it, draw clue regions, record source and licence, review and publish |
 | API | `src/app/api/**` | Typed, validated JSON API ([docs/API.md](docs/API.md)) |

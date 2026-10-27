@@ -31,7 +31,8 @@ export const CLUE_KINDS = [
 ] as const;
 export type ClueKind = (typeof CLUE_KINDS)[number];
 
-export const ROUND_KINDS = ["daily", "practice", "assessment_pre", "assessment_post"] as const;
+/** `spot` is "spot the odd one out": puzzles of 4 media where exactly one has the other label. */
+export const ROUND_KINDS = ["daily", "practice", "assessment_pre", "assessment_post", "spot"] as const;
 export type RoundKind = (typeof ROUND_KINDS)[number];
 
 export const ITEM_STATUSES = ["draft", "published", "archived"] as const;
@@ -44,6 +45,9 @@ export const STAFF_ROLES = ["teacher", "admin"] as const;
 export type StaffRole = (typeof STAFF_ROLES)[number];
 
 export const ROUND_SIZE = 8;
+/** Spot rounds: this many puzzles, each a grid of SPOT_GRID items. */
+export const SPOT_PUZZLES = 4;
+export const SPOT_GRID = 4;
 export const CONFIDENCE_MIN = 50;
 export const CONFIDENCE_MAX = 100;
 
@@ -117,9 +121,43 @@ export type RoundDTO = {
   id: string;
   kind: RoundKind;
   dayKey: string; // YYYY-MM-DD (UTC)
-  items: PlayItemDTO[];
-  answers: AnswerResultDTO[]; // already answered items, in order
+  items: PlayItemDTO[]; // for spot rounds: every item of every puzzle
+  answers: AnswerResultDTO[]; // already answered items, in order (not used by spot rounds)
+  /** Spot rounds only: the puzzles, in play order. Never says which item is the odd one. */
+  puzzles: SpotPuzzleDTO[] | null;
+  /** Spot rounds only: results of the puzzles answered so far, in order. */
+  spotResults: SpotResultDTO[];
   completedAt: string | null;
+};
+
+export type SpotPuzzleDTO = {
+  index: number;
+  itemIds: string[];
+  /** What the player must find: the one AI-made item among real ones, or the one real item among AI-made ones. */
+  find: Label;
+};
+
+export const spotPickSchema = z.object({
+  puzzle: z.number().int().min(0).max(50),
+  itemId: z.string().uuid(),
+  confidence: z.number().int().min(CONFIDENCE_MIN).max(CONFIDENCE_MAX),
+  responseMs: z.number().int().min(0).max(30 * 60 * 1000),
+});
+export type SpotPickInput = z.infer<typeof spotPickSchema>;
+
+export type SpotResultDTO = {
+  puzzle: number;
+  pickedItemId: string;
+  oddItemId: string;
+  find: Label;
+  correct: boolean;
+  confidence: number;
+  points: number;
+  /** Every item of the puzzle with its true label and source. */
+  items: { itemId: string; label: Label; source: SourceDTO }[];
+  /** The clues for the odd item: why it is the odd one out. */
+  clues: ClueDTO[];
+  progress: { answered: number; total: number };
 };
 
 export const answerSchema = z.object({

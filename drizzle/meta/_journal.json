@@ -15,6 +15,13 @@
       "when": 1793098020943,
       "tag": "0001_class_nickname_unique",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1793099006543,
+      "tag": "0002_spot_the_odd_one",
+      "breakpoints": true
     }
   ]
 }

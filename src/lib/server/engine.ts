@@ -190,6 +190,61 @@ export function selectRoundItems(opts: SelectOptions): string[] {
   );
 }
 
+export type SpotPuzzle = { itemIds: string[]; oddId: string; find: Label };
+
+const flip = (l: Label): Label => (l === "ai" ? "real" : "ai");
+
+/**
+ * Builds "spot the odd one out" puzzles: each has `grid` items where exactly one
+ * (the odd one) has the label the player must find. The rest share one category
+ * with the odd item whenever the library allows, so the comparison is fair.
+ * Items the player has not seen recently are preferred; no item repeats in a round.
+ * The label to find is random per puzzle, and the odd item's position is shuffled.
+ */
+export function buildSpotPuzzles(opts: {
+  candidates: readonly Candidate[];
+  history: ReadonlyMap<string, SeenInfo>;
+  now: Date;
+  puzzles: number;
+  grid: number;
+  rng: () => number;
+}): SpotPuzzle[] {
+  const { candidates, history, now, puzzles, grid, rng } = opts;
+  const freshness = (c: Candidate) => {
+    const seen = history.get(c.id);
+    const ageDays = seen ? (now.getTime() - seen.lastSeenAt.getTime()) / DAY_MS : Infinity;
+    return (ageDays >= REST_DAYS_CORRECT ? 1 : 0) + rng() * 0.5;
+  };
+  // Freshest first, with randomness so puzzles differ from round to round.
+  const ordered = candidates
+    .map((c) => ({ c, f: freshness(c) }))
+    .sort((a, b) => b.f - a.f)
+    .map((x) => x.c);
+  const used = new Set<string>();
+  const out: SpotPuzzle[] = [];
+
+  const tryBuild = (find: Label): SpotPuzzle | null => {
+    const odds = ordered.filter((c) => c.label === find && !used.has(c.id));
+    const others = ordered.filter((c) => c.label === flip(find) && !used.has(c.id));
+    if (odds.length === 0 || others.length < grid - 1) return null;
+    for (const odd of odds) {
+      const sameCat = others.filter((c) => c.category === odd.category);
+      if (sameCat.length >= grid - 1) return { oddId: odd.id, find, itemIds: [odd.id, ...sameCat.slice(0, grid - 1).map((c) => c.id)] };
+    }
+    // No category has enough: fall back to the freshest odd item with any others.
+    return { oddId: odds[0].id, find, itemIds: [odds[0].id, ...others.slice(0, grid - 1).map((c) => c.id)] };
+  };
+
+  for (let i = 0; i < puzzles; i++) {
+    const first: Label = rng() < 0.5 ? "ai" : "real";
+    const puzzle = tryBuild(first) ?? tryBuild(flip(first));
+    if (!puzzle) break;
+    puzzle.itemIds.forEach((id) => used.add(id));
+    out.push({ ...puzzle, itemIds: shuffle(puzzle.itemIds, rng) });
+  }
+  return out;
+}
+
 /**
  * How many AI items a round gets: Binomial(size, ½), re-drawn until both labels
  * appear (for rounds of 4+). The count varies round to round, so players cannot

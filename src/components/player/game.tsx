@@ -15,7 +15,8 @@ import { RetryError } from "./retry-error";
 import { RevealPanel } from "./reveal-panel";
 import { RoundSummary } from "./round-summary";
 
-type GameKind = RoundKind;
+/** Rounds played one item at a time ("spot" rounds have their own grid game). */
+type GameKind = Exclude<RoundKind, "spot">;
 
 const KIND_COPY: Record<GameKind, { name: string; loading: string }> = {
   daily: { name: "Daily challenge", loading: "Loading today's challenge…" },

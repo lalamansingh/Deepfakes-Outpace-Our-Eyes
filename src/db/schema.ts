@@ -159,6 +159,8 @@ export const rounds = pgTable(
     kind: text("kind").$type<RoundKind>().notNull(),
     dayKey: text("day_key").notNull(),
     itemIds: jsonb("item_ids").$type<string[]>().notNull(),
+    /** Spot rounds only: the puzzles, including the server-side answer (oddId). */
+    puzzles: jsonb("puzzles").$type<{ itemIds: string[]; oddId: string; find: Label }[]>(),
     score: integer("score"),
     ...timestamps,
     completedAt: timestamp("completed_at", { withTimezone: true }),
@@ -168,7 +170,7 @@ export const rounds = pgTable(
     // One daily round per player per day, one of each assessment per player.
     uniqueIndex("rounds_daily_uq").on(t.playerId, t.dayKey).where(sql`${t.kind} = 'daily'`),
     uniqueIndex("rounds_assessment_uq").on(t.playerId, t.kind).where(sql`${t.kind} like 'assessment%'`),
-    check("rounds_kind_ck", sql`${t.kind} in ('daily', 'practice', 'assessment_pre', 'assessment_post')`),
+    check("rounds_kind_ck", sql`${t.kind} in ('daily', 'practice', 'assessment_pre', 'assessment_post', 'spot')`),
   ],
 );
 
@@ -190,6 +192,8 @@ export const answers = pgTable(
     correct: boolean("correct").notNull(),
     points: integer("points").notNull(),
     responseMs: integer("response_ms").notNull(),
+    /** Spot rounds only: the item the player picked (the answer row itself is stored on the odd item). */
+    pickedItemId: uuid("picked_item_id").references(() => items.id, { onDelete: "restrict" }),
     ...timestamps,
   },
   (t) => [

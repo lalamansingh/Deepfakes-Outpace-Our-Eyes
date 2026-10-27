@@ -1,3 +1,4 @@
+import path from "node:path";
 import type { NextConfig } from "next";
 
 const isDev = process.env.NODE_ENV !== "production";
@@ -19,6 +20,8 @@ const csp = [
 
 const nextConfig: NextConfig = {
   output: "standalone",
+  // Pin the project root (a stray lockfile in a parent folder would otherwise confuse file tracing).
+  outputFileTracingRoot: path.join(__dirname),
   // Lets several dev servers run side by side (each with its own build folder).
   distDir: process.env.NEXT_DIST_DIR || ".next",
   poweredByHeader: false,

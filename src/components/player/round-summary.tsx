@@ -70,7 +70,9 @@ export function RoundSummary({
               ? "Starting check complete"
               : summary.kind === "assessment_post"
                 ? "Final check complete"
-                : "Practice round complete"}
+                : summary.kind === "spot"
+                  ? "Spot the fake complete"
+                  : "Practice round complete"}
         </p>
         <h1 className="mt-2 text-3xl font-bold tracking-tight text-white sm:text-4xl">
           {alreadyDone ? "Come back tomorrow" : summary.correct >= summary.total * 0.75 ? "Sharp eyes!" : "Round complete"}
