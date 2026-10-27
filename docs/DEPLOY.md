@@ -47,6 +47,15 @@ When the schema changes later: run `npm run db:migrate` against `DATABASE_URL` b
 
 ---
 
+### How this project is deployed on Vercel
+
+`vercel.json` runs `db:migrate` and `db:seed` (over `DATABASE_URL_UNPOOLED` when present) before
+`next build`, so every deploy brings the database up to date and adds any new content items.
+Seeding only inserts missing slugs and creates the admin once, so it is safe to run on every build.
+Neon was added from the Vercel dashboard (Storage → Neon), which sets `DATABASE_URL` automatically.
+
+---
+
 ## Option B — Docker on any server (VPS, school server, cloud VM)
 
 Requires Docker with the compose plugin.
