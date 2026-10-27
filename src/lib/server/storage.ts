@@ -148,6 +148,10 @@ export async function storeUpload(file: File): Promise<StoredMedia> {
     if (!origin) throw new HttpError("internal", "MEDIA_PUBLIC_ORIGIN must be set when S3_BUCKET is used");
     return { url: `${origin.replace(/\/$/, "")}/${key}`, mediaType: kind.mediaType, width, height };
   }
+  if (process.env.VERCEL) {
+    // Serverless disks are temporary: files written here would vanish on the next deploy.
+    throw new HttpError("validation_error", "Uploads need a storage bucket in this deployment. Set S3_BUCKET and MEDIA_PUBLIC_ORIGIN (see docs/DEPLOY.md).");
+  }
   await mkdir(uploadDir(), { recursive: true });
   await writeFile(path.join(uploadDir(), key), body);
   return { url: `/api/media/${key}`, mediaType: kind.mediaType, width, height };
