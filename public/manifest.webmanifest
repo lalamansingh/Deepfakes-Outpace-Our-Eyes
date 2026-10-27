@@ -1,0 +1,17 @@
+{
+  "name": "Real or Rendered?",
+  "short_name": "R or R",
+  "description": "A 5-minute daily game that trains you to spot AI-generated images, voices and videos.",
+  "start_url": "/play",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "theme_color": "#1c091c",
+  "background_color": "#1c091c",
+  "lang": "en",
+  "categories": ["education", "games"],
+  "icons": [
+    { "src": "/icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "/icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
+  ]
+}

@@ -1,0 +1,49 @@
+# Production-like stack: PostgreSQL + the app.
+#   cp .env.example .env   (set SESSION_SECRET, ADMIN_EMAIL, ADMIN_PASSWORD)
+#   docker compose up -d --build
+#   docker compose run --rm tools npm run db:seed
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: rr
+      POSTGRES_PASSWORD: rr
+      POSTGRES_DB: real_or_rendered
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U rr -d real_or_rendered"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  app:
+    build:
+      context: .
+      target: runner
+      args:
+        MEDIA_PUBLIC_ORIGIN: ${MEDIA_PUBLIC_ORIGIN:-}
+    depends_on:
+      db: { condition: service_healthy }
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://rr:rr@db:5432/real_or_rendered
+      AUTO_MIGRATE: "true"
+    ports:
+      - "3000:3000"
+    volumes:
+      - uploads:/app/.data/uploads
+    restart: unless-stopped
+
+  tools:
+    build: { context: ., target: tools }
+    profiles: ["tools"]
+    depends_on:
+      db: { condition: service_healthy }
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://rr:rr@db:5432/real_or_rendered
+
+volumes:
+  pgdata:
+  uploads:

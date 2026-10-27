@@ -1,26 +1,70 @@
 @import "tailwindcss";
 
+/* Brand palette sampled from the project cover (Deepfakes-Outpace-Our-Eyes_cover.png).
+   Use only these tokens in components: bg-wine, text-ora, bg-plum, bg-tint ... */
+@theme {
+  --color-wine: #8b1040;
+  --color-wine-deep: #5d0d33;
+  --color-plum: #1c091c;
+  --color-plum-2: #271d2b;
+  --color-plum-3: #452e56;
+  --color-ora: #ff8a1e;
+  --color-ora-light: #ff962d;
+  --color-ora-deep: #ff713a;
+  --color-ink: #1c091c;
+  --color-muted: #5e5060;
+  --color-subtle: #8a7f88;
+  --color-tint: #f7ecf1;
+  --color-ora-tint: #fff4ea;
+  --color-line: #ebdce3;
+  --color-surface: #ffffff;
+
+  --font-sans: var(--font-poppins), ui-sans-serif, system-ui, sans-serif;
+
+  --radius-card: 1.25rem;
+}
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  color-scheme: light;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html,
+body {
+  background: var(--color-surface);
+  color: var(--color-ink);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Dark brand surfaces (hero, game stage) */
+.bg-brand-dark {
+  background:
+    radial-gradient(ellipse 60% 70% at 0% 0%, rgb(139 16 64 / 0.55), transparent 70%),
+    radial-gradient(ellipse 50% 60% at 100% 100%, rgb(255 113 58 / 0.35), transparent 70%),
+    var(--color-plum);
+}
+
+.bg-gradient-ora {
+  background-image: linear-gradient(135deg, var(--color-ora-light), var(--color-ora-deep));
+}
+
+.bg-gradient-wine {
+  background-image: linear-gradient(135deg, var(--color-wine), var(--color-wine-deep));
+}
+
+:focus-visible {
+  outline: 3px solid var(--color-ora);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
 }

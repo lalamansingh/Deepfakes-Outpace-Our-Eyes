@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "players_class_nickname_uq" ON "players" USING btree ("classroom_id",lower("nickname"));

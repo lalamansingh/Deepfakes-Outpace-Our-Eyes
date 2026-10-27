@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <radialGradient id="glow-wine" cx="0" cy="0" r="0.9">
+      <stop offset="0" stop-color="#8b1040" stop-opacity="0.75"/>
+      <stop offset="1" stop-color="#8b1040" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="glow-ora" cx="1" cy="1" r="0.8">
+      <stop offset="0" stop-color="#ff713a" stop-opacity="0.45"/>
+      <stop offset="1" stop-color="#ff713a" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="ora" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ff962d"/>
+      <stop offset="1" stop-color="#ff713a"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" fill="#1c091c"/>
+  <rect width="512" height="512" fill="url(#glow-wine)"/>
+  <rect width="512" height="512" fill="url(#glow-ora)"/>
+  <path d="M96 256c48-80 104-120 160-120s112 40 160 120c-48 80-104 120-160 120S144 336 96 256Z" fill="none" stroke="url(#ora)" stroke-width="26" stroke-linejoin="round"/>
+  <path d="M256 180a76 76 0 0 0 0 152Z" fill="#8b1040"/>
+  <path d="M256 180a76 76 0 0 1 0 152Z" fill="url(#ora)"/>
+</svg>
